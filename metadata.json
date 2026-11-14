@@ -1,0 +1,6 @@
+{
+  "name": "Multi-API PDF AI Chatbot",
+  "description": "Advanced Multiple PDF AI Chatbot with intelligent multi-API automatic fallback (Gemini, Groq, Cloudflare, OpenRouter, AnyRouter)",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
