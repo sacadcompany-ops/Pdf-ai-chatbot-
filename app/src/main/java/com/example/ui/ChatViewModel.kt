@@ -11,12 +11,15 @@ import com.example.data.ChatMessageEntity
 import com.example.data.PdfDocumentEntity
 import com.example.data.PdfExtractor
 import com.example.data.ProviderConfigEntity
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class ChatViewModel(application: Application) : AndroidViewModel(application) {
     private val db = AppDatabase.getDatabase(application)
@@ -69,6 +72,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun addDocumentFromUri(uri: Uri) {
+        if (_isLoading.value) return
         viewModelScope.launch {
             _isLoading.value = true
             try {
@@ -83,11 +87,12 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 val inserted = pdfDao.getDocumentById(id)
                 if (inserted != null) {
                     selectDocument(inserted)
-                    _uiMessage.value = "Successfully imported ${inserted.fileName}"
+                    _uiMessage.value = "Successfully imported ${inserted.fileName} (${inserted.pageCount} pages)"
                 }
-            } catch (e: Exception) {
-                Log.e("ChatViewModel", "Failed to import PDF", e)
-                _uiMessage.value = "Failed to import PDF: ${e.localizedMessage}"
+            } catch (t: Throwable) {
+                if (t is CancellationException) throw t
+                Log.e("ChatViewModel", "Failed to import PDF", t)
+                _uiMessage.value = "Failed to import PDF: ${t.localizedMessage ?: "Unsupported or too large PDF"}"
             } finally {
                 _isLoading.value = false
             }
@@ -96,6 +101,9 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
     fun deleteDocument(document: PdfDocumentEntity) {
         viewModelScope.launch {
+            withContext(Dispatchers.IO) {
+                PdfExtractor.deleteStoredTextFile(document.extractedText)
+            }
             chatDao.clearMessagesForDocument(document.id)
             pdfDao.deleteDocument(document)
             if (_selectedDocument.value?.id == document.id) {
@@ -130,7 +138,9 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             _isLoading.value = true
 
             try {
-                val relevantContext = PdfExtractor.retrieveRelevantContext(cleanPrompt, doc.extractedText)
+                val relevantContext = withContext(Dispatchers.IO) {
+                    PdfExtractor.retrieveRelevantContext(cleanPrompt, doc.extractedText)
+                }
                 val (responseContent, providerUsed) = fallbackManager.queryWithFallback(
                     prompt = cleanPrompt,
                     pdfContext = relevantContext,

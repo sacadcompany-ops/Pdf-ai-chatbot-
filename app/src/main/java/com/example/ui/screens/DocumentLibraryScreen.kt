@@ -29,6 +29,16 @@ fun DocumentLibraryScreen(
     val documents by viewModel.documents.collectAsState()
     val selectedDoc by viewModel.selectedDocument.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
+    val uiMessage by viewModel.uiMessage.collectAsState()
+
+    val snackbarHostState = remember { SnackbarHostState() }
+
+    LaunchedEffect(uiMessage) {
+        if (uiMessage != null) {
+            snackbarHostState.showSnackbar(uiMessage!!)
+            viewModel.clearUiMessage()
+        }
+    }
 
     val pdfLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocument()
@@ -48,17 +58,24 @@ fun DocumentLibraryScreen(
                 )
             )
         },
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         floatingActionButton = {
             FloatingActionButton(
-                onClick = { pdfLauncher.launch(arrayOf("application/pdf")) },
-                modifier = Modifier.testTag("upload_pdf_fab")
+                onClick = {
+                    if (!isLoading) {
+                        pdfLauncher.launch(arrayOf("application/pdf"))
+                    }
+                },
+                modifier = Modifier
+                    .minimumInteractiveComponentSize()
+                    .testTag("upload_pdf_fab")
             ) {
                 Icon(imageVector = Icons.Default.Add, contentDescription = "Upload PDF")
             }
         }
     ) { padding ->
         Box(modifier = Modifier.fillMaxSize().padding(padding)) {
-            if (documents.isEmpty()) {
+            if (documents.isEmpty() && !isLoading) {
                 Column(
                     modifier = Modifier.fillMaxSize().padding(24.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
@@ -88,7 +105,7 @@ fun DocumentLibraryScreen(
                     contentPadding = PaddingValues(16.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    items(documents) { doc ->
+                    items(documents, key = { it.id }) { doc ->
                         val isSelected = selectedDoc?.id == doc.id
                         Card(
                             modifier = Modifier
@@ -124,7 +141,10 @@ fun DocumentLibraryScreen(
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                 }
-                                IconButton(onClick = { viewModel.deleteDocument(doc) }) {
+                                IconButton(
+                                    onClick = { viewModel.deleteDocument(doc) },
+                                    modifier = Modifier.minimumInteractiveComponentSize()
+                                ) {
                                     Icon(
                                         imageVector = Icons.Default.Delete,
                                         contentDescription = "Delete PDF",
@@ -138,7 +158,25 @@ fun DocumentLibraryScreen(
             }
 
             if (isLoading) {
-                CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
+                Surface(
+                    tonalElevation = 6.dp,
+                    shape = MaterialTheme.shapes.medium,
+                    modifier = Modifier
+                        .align(Alignment.Center)
+                        .padding(24.dp)
+                ) {
+                    Column(
+                        modifier = Modifier.padding(24.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        CircularProgressIndicator()
+                        Text(
+                            text = "Buugga PDF-ka waa la soo gelinayaa...",
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                    }
+                }
             }
         }
     }
